@@ -4,6 +4,8 @@ import Navbar from '../../components/Navbar'
 import { getCurrentUser } from '../../lib/auth'
 import { CATEGORIES, PRIORITIES } from '../../lib/store'
 
+const MIN_DESCRIPTION_LENGTH = 20
+
 const EMPTY_FORM = {
   title: '',
   description: '',
@@ -19,6 +21,7 @@ export default function NewTicket() {
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   useEffect(() => {
     const u = getCurrentUser()
@@ -28,14 +31,31 @@ export default function NewTicket() {
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }))
+    setFieldErrors((errors) => ({ ...errors, [field]: '' }))
+    setError(null)
+  }
+
+  function validateForm() {
+    const errors = {}
+    if (!form.title.trim()) errors.title = 'Title is required.'
+    if (!form.description.trim()) {
+      errors.description = 'Description is required.'
+    } else if (form.description.trim().length < MIN_DESCRIPTION_LENGTH) {
+      errors.description = `Use at least ${MIN_DESCRIPTION_LENGTH} characters.`
+    }
+    if (!form.category) errors.category = 'Category is required.'
+    if (!form.location.trim()) errors.location = 'Location is required.'
+    if (!PRIORITIES.includes(form.priority)) {
+      errors.priority = 'Choose a valid priority.'
+    }
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
   }
 
   async function handleSubmit(ev) {
     ev.preventDefault()
-    if (!form.title.trim() || !form.location.trim()) {
-      setError('Title and location are required.')
-      return
-    }
+    if (!validateForm()) return
+
     setSubmitting(true)
     setError(null)
     try {
@@ -81,26 +101,38 @@ export default function NewTicket() {
           <div className="field">
             <label>Title</label>
             <input
+              aria-invalid={Boolean(fieldErrors.title)}
               value={form.title}
               onChange={(e) => update('title', e.target.value)}
               placeholder="e.g. Projector not turning on"
               maxLength={80}
             />
+            {fieldErrors.title && (
+              <div className="field-hint">{fieldErrors.title}</div>
+            )}
           </div>
 
           <div className="field">
             <label>Description</label>
             <textarea
+              aria-invalid={Boolean(fieldErrors.description)}
               value={form.description}
               onChange={(e) => update('description', e.target.value)}
               placeholder="What's happening, and anything a technician should know before arriving."
             />
+            <div className="field-hint">
+              Minimum {MIN_DESCRIPTION_LENGTH} characters.
+            </div>
+            {fieldErrors.description && (
+              <div className="field-hint">{fieldErrors.description}</div>
+            )}
           </div>
 
           <div className="field-row">
             <div className="field">
               <label>Category</label>
               <select
+                aria-invalid={Boolean(fieldErrors.category)}
                 value={form.category}
                 onChange={(e) => update('category', e.target.value)}
               >
@@ -110,11 +142,15 @@ export default function NewTicket() {
                   </option>
                 ))}
               </select>
+              {fieldErrors.category && (
+                <div className="field-hint">{fieldErrors.category}</div>
+              )}
             </div>
 
             <div className="field">
               <label>Priority</label>
               <select
+                aria-invalid={Boolean(fieldErrors.priority)}
                 value={form.priority}
                 onChange={(e) => update('priority', e.target.value)}
               >
@@ -127,16 +163,23 @@ export default function NewTicket() {
               <div className="field-hint">
                 P1 is urgent/safety, P4 is minor.
               </div>
+              {fieldErrors.priority && (
+                <div className="field-hint">{fieldErrors.priority}</div>
+              )}
             </div>
           </div>
 
           <div className="field">
             <label>Location</label>
             <input
+              aria-invalid={Boolean(fieldErrors.location)}
               value={form.location}
               onChange={(e) => update('location', e.target.value)}
               placeholder="e.g. Hall A - Room 101"
             />
+            {fieldErrors.location && (
+              <div className="field-hint">{fieldErrors.location}</div>
+            )}
           </div>
 
           <button

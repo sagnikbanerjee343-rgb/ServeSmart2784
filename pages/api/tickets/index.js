@@ -6,6 +6,8 @@ import {
   PRIORITIES,
 } from '../../../lib/store'
 
+const MIN_DESCRIPTION_LENGTH = 20
+
 export default function handler(req, res) {
   if (req.method === 'GET') return handleGet(req, res)
   if (req.method === 'POST') return handlePost(req, res)
@@ -29,25 +31,54 @@ function handlePost(req, res) {
   const { title, description, category, location, priority, studentId } =
     req.body || {}
 
-  if (!title || !title.trim() || !location || !location.trim()) {
-    return res.status(400).json({ error: 'Title and location are required.' })
+  const cleanTitle = typeof title === 'string' ? title.trim() : ''
+  const cleanDescription =
+    typeof description === 'string' ? description.trim() : ''
+  const cleanLocation = typeof location === 'string' ? location.trim() : ''
+
+  if (!cleanTitle) {
+    return res.status(400).json({ error: 'Title is required.' })
   }
-  if (category && !CATEGORIES.includes(category)) {
+  if (!cleanDescription) {
+    return res.status(400).json({ error: 'Description is required.' })
+  }
+  if (cleanDescription.length < MIN_DESCRIPTION_LENGTH) {
+    return res.status(400).json({
+      error: `Description must be at least ${MIN_DESCRIPTION_LENGTH} characters.`,
+    })
+  }
+  if (!category) {
+    return res.status(400).json({ error: 'Category is required.' })
+  }
+  if (!cleanLocation) {
+    return res.status(400).json({ error: 'Location is required.' })
+  }
+  if (!priority) {
+    return res.status(400).json({ error: 'Priority is required.' })
+  }
+  if (!studentId) {
+    return res.status(400).json({ error: 'Student is required.' })
+  }
+
+  const student = findUser(studentId)
+  if (!student || student.role !== 'student') {
+    return res.status(400).json({ error: 'A valid student is required.' })
+  }
+  if (!CATEGORIES.includes(category)) {
     return res.status(400).json({ error: 'Unknown category.' })
   }
-  if (priority && !PRIORITIES.includes(priority)) {
+  if (!PRIORITIES.includes(priority)) {
     return res.status(400).json({ error: 'Unknown priority.' })
   }
   const now = new Date().toISOString()
-  const student = findUser(studentId)
 
   const ticket = {
     id: generateId(),
-    title: title.trim(),
-    description: (description || '').trim(),
-    category: category || CATEGORIES[0],
-    location: location.trim(),
-    priority: priority || 'P4',
+    title: cleanTitle,
+    description: cleanDescription,
+    category,
+    location: cleanLocation,
+    priority,
     status: 'Open',
     studentId: studentId || null,
     technicianId: null,
