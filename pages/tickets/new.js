@@ -5,6 +5,14 @@ import { getCurrentUser } from '../../lib/auth'
 import { CATEGORIES, PRIORITIES } from '../../lib/store'
 
 const MIN_DESCRIPTION_LENGTH = 20
+const MAX_ATTACHMENTS = 3
+const MAX_ATTACHMENT_BYTES = 250 * 1024
+const ALLOWED_ATTACHMENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]
 
 const EMPTY_FORM = {
   title: '',
@@ -12,6 +20,7 @@ const EMPTY_FORM = {
   category: CATEGORIES[0],
   location: '',
   priority: 'P3',
+  attachments: [],
 }
 
 export default function NewTicket() {
@@ -33,6 +42,61 @@ export default function NewTicket() {
     setForm((f) => ({ ...f, [field]: value }))
     setFieldErrors((errors) => ({ ...errors, [field]: '' }))
     setError(null)
+  }
+
+  async function handleFiles(event) {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!files.length) return
+
+    if (form.attachments.length + files.length > MAX_ATTACHMENTS) {
+      setError(`Attach no more than ${MAX_ATTACHMENTS} files.`)
+      return
+    }
+
+    const invalid = files.find(
+      (file) =>
+        !ALLOWED_ATTACHMENT_TYPES.includes(file.type) ||
+        file.size > MAX_ATTACHMENT_BYTES,
+    )
+    if (invalid) {
+      setError('Attachments must be JPEG, PNG, WebP, or PDF files under 250 KB.')
+      return
+    }
+
+    try {
+      const attachments = await Promise.all(
+        files.map(
+          (file) =>
+            new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () =>
+                resolve({
+                  name: file.name,
+                  type: file.type,
+                  size: file.size,
+                  dataUrl: reader.result,
+                })
+              reader.onerror = () => reject(new Error('Could not read the attachment.'))
+              reader.readAsDataURL(file)
+            }),
+        ),
+      )
+      setForm((current) => ({
+        ...current,
+        attachments: [...current.attachments, ...attachments],
+      }))
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function removeAttachment(index) {
+    setForm((current) => ({
+      ...current,
+      attachments: current.attachments.filter((_, i) => i !== index),
+    }))
   }
 
   function validateForm() {
@@ -72,7 +136,7 @@ export default function NewTicket() {
         throw new Error(data.error || 'Could not submit the ticket.')
       }
       setSuccess(true)
-      setForm(EMPTY_FORM)
+      setForm({ ...EMPTY_FORM, attachments: [] })
       setTimeout(() => router.push('/tickets'), 700)
     } catch (err) {
       setError(err.message)
@@ -182,6 +246,37 @@ export default function NewTicket() {
             />
             {fieldErrors.location && (
               <div className="field-hint">{fieldErrors.location}</div>
+            )}
+          </div>
+
+          <div className="field">
+            <label htmlFor="attachments">Photos or files</label>
+            <input
+              id="attachments"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              multiple
+              onChange={handleFiles}
+              disabled={submitting || form.attachments.length >= MAX_ATTACHMENTS}
+            />
+            <div className="field-hint">
+              Add up to {MAX_ATTACHMENTS} photos or PDF files, 250 KB each.
+            </div>
+            {form.attachments.length > 0 && (
+              <div className="attachment-list">
+                {form.attachments.map((attachment, index) => (
+                  <div className="attachment-item" key={`${attachment.name}-${index}`}>
+                    <span>{attachment.name}</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => removeAttachment(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

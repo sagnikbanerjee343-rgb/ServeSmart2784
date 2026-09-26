@@ -18,6 +18,13 @@ const NEXT_STATUS = {
   Resolved: 'Closed',
 }
 
+const RATING_OPTIONS = [1, 2, 3, 4, 5]
+
+function formatAttachmentSize(bytes) {
+  if (!bytes) return ''
+  return `${Math.round(bytes / 1024)} KB`
+}
+
 export default function TicketDetail() {
   const router = useRouter()
   const { id } = router.query
@@ -26,6 +33,12 @@ export default function TicketDetail() {
   const [error, setError] = useState(null)
   const [working, setWorking] = useState(false)
   const [selectedTech, setSelectedTech] = useState('')
+  const [feedbackForm, setFeedbackForm] = useState({
+    helpfulness: 5,
+    resolution: 5,
+    responseTime: 5,
+    comment: '',
+  })
 
   useEffect(() => {
     const u = getCurrentUser()
@@ -80,6 +93,10 @@ export default function TicketDetail() {
     }
   }
 
+  function updateFeedback(field, value) {
+    setFeedbackForm((current) => ({ ...current, [field]: value }))
+  }
+
   if (!user) return null
   if (error && !ticket)
     return (
@@ -107,6 +124,12 @@ export default function TicketDetail() {
   const isOwner = user.role === 'admin'
   const isAssignedTech =
     user.role === 'technician' && ticket.technicianId === user.id
+  const isStudentOwner =
+    user.role === 'student' && ticket.studentId === user.id
+  const canLeaveFeedback =
+    isStudentOwner &&
+    ['Resolved', 'Closed'].includes(ticket.status) &&
+    !ticket.feedback
   const nextStatus = NEXT_STATUS[ticket.status]
   const backHref =
     user.role === 'technician'
@@ -146,6 +169,34 @@ export default function TicketDetail() {
                 {ticket.description || 'No description provided.'}
               </p>
             </div>
+
+            {ticket.attachments?.length > 0 && (
+              <div className="panel panel-pad" style={{ marginBottom: 14 }}>
+                <div className="section-label">Attachments</div>
+                <div className="attachment-grid">
+                  {ticket.attachments.map((attachment) => (
+                    <div className="attachment-preview" key={attachment.name}>
+                      {attachment.type.startsWith('image/') ? (
+                        <a
+                          href={attachment.dataUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <img src={attachment.dataUrl} alt={attachment.name} />
+                        </a>
+                      ) : (
+                        <a href={attachment.dataUrl} download={attachment.name}>
+                          Open {attachment.name}
+                        </a>
+                      )}
+                      <div className="field-hint">
+                        {attachment.name} · {formatAttachmentSize(attachment.size)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="panel panel-pad">
               <div className="section-label">Activity</div>
@@ -237,6 +288,70 @@ export default function TicketDetail() {
                     {working ? 'Saving…' : 'Save'}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {ticket.feedback && (
+              <div className="panel panel-pad" style={{ marginTop: 14 }}>
+                <div className="section-label">Student feedback</div>
+                <div className="kv-list">
+                  <div className="kv-row">
+                    <span className="k">Technician helpfulness</span>
+                    <span className="v">{ticket.feedback.helpfulness}/5</span>
+                  </div>
+                  <div className="kv-row">
+                    <span className="k">Resolution quality</span>
+                    <span className="v">{ticket.feedback.resolution}/5</span>
+                  </div>
+                  <div className="kv-row">
+                    <span className="k">Response time</span>
+                    <span className="v">{ticket.feedback.responseTime}/5</span>
+                  </div>
+                </div>
+                {ticket.feedback.comment && <p>{ticket.feedback.comment}</p>}
+              </div>
+            )}
+
+            {canLeaveFeedback && (
+              <div className="panel panel-pad" style={{ marginTop: 14 }}>
+                <div className="section-label">Rate this service</div>
+                {[
+                  ['helpfulness', 'Technician helpfulness'],
+                  ['resolution', 'Resolution quality'],
+                  ['responseTime', 'Response time'],
+                ].map(([field, label]) => (
+                  <div className="field" key={field}>
+                    <label>{label}</label>
+                    <select
+                      value={feedbackForm[field]}
+                      onChange={(e) =>
+                        updateFeedback(field, Number(e.target.value))
+                      }
+                    >
+                      {RATING_OPTIONS.map((rating) => (
+                        <option key={rating} value={rating}>
+                          {rating}/5
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+                <div className="field">
+                  <label>Comment (optional)</label>
+                  <textarea
+                    value={feedbackForm.comment}
+                    onChange={(e) => updateFeedback('comment', e.target.value)}
+                    maxLength={500}
+                    placeholder="Tell us how the service went."
+                  />
+                </div>
+                <button
+                  className="btn btn-primary"
+                  disabled={working}
+                  onClick={() => patch({ feedback: feedbackForm })}
+                >
+                  {working ? 'Submitting…' : 'Submit feedback'}
+                </button>
               </div>
             )}
           </div>

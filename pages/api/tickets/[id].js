@@ -9,6 +9,8 @@ const NEXT_STATUS = {
   Resolved: 'Closed',
 }
 
+const RATING_FIELDS = ['helpfulness', 'resolution', 'responseTime']
+
 function addActivity(ticket, activity) {
   if (!Array.isArray(ticket.activity)) ticket.activity = []
   ticket.activity.push({
@@ -33,8 +35,19 @@ export default function handler(req, res) {
   if (req.method === 'GET') return res.status(200).json({ ticket })
 
   if (req.method === 'PATCH') {
-    if (actor.role !== 'technician' && actor.role !== 'admin') {
+    const body = req.body || {}
+    const isFeedbackUpdate = Object.prototype.hasOwnProperty.call(
+      body,
+      'feedback',
+    )
+    if (actor.role === 'student' && !isFeedbackUpdate) {
       return res.status(403).json({ error: 'You cannot update this ticket.' })
+    }
+    if (actor.role === 'admin' && isFeedbackUpdate) {
+      return res.status(403).json({ error: 'Only the student can submit feedback.' })
+    }
+    if (actor.role === 'technician' && isFeedbackUpdate) {
+      return res.status(403).json({ error: 'Only the student can submit feedback.' })
     }
     return handlePatch(req, res, ticket, actor)
   }
@@ -44,11 +57,60 @@ export default function handler(req, res) {
 }
 
 function handlePatch(req, res, ticket, actor) {
-  const { technicianId, status } = req.body || {}
+  const { technicianId, status, feedback } = req.body || {}
   const now = new Date().toISOString()
 
-  if (technicianId === undefined && status === undefined) {
+  if (
+    technicianId === undefined &&
+    status === undefined &&
+    feedback === undefined
+  ) {
     return res.status(400).json({ error: 'No ticket update was provided.' })
+  }
+
+  if (feedback !== undefined) {
+    if (technicianId !== undefined || status !== undefined) {
+      return res.status(400).json({
+        error: 'Feedback must be submitted as a separate update.',
+      })
+    }
+    if (actor.role !== 'student' || ticket.studentId !== actor.id) {
+      return res.status(403).json({ error: 'Only the ticket owner can submit feedback.' })
+    }
+    if (!['Resolved', 'Closed'].includes(ticket.status)) {
+      return res.status(400).json({
+        error: 'Feedback is available after the ticket is resolved.',
+      })
+    }
+    if (ticket.feedback) {
+      return res.status(400).json({ error: 'Feedback has already been submitted.' })
+    }
+    if (!feedback || typeof feedback !== 'object') {
+      return res.status(400).json({ error: 'Invalid feedback.' })
+    }
+    for (const field of RATING_FIELDS) {
+      if (!Number.isInteger(feedback[field]) || feedback[field] < 1 || feedback[field] > 5) {
+        return res.status(400).json({ error: 'Ratings must be between 1 and 5.' })
+      }
+    }
+    const comment = typeof feedback.comment === 'string' ? feedback.comment.trim() : ''
+    if (comment.length > 500) {
+      return res.status(400).json({ error: 'Feedback must be 500 characters or fewer.' })
+    }
+    ticket.feedback = {
+      helpfulness: feedback.helpfulness,
+      resolution: feedback.resolution,
+      responseTime: feedback.responseTime,
+      comment,
+      submittedAt: now,
+    }
+    ticket.updatedAt = now
+    addActivity(ticket, {
+      type: 'feedback',
+      message: 'Student submitted service feedback',
+      at: now,
+    })
+    return res.status(200).json({ ticket })
   }
 
   if (status !== undefined && typeof status !== 'string') {
@@ -127,6 +189,9 @@ function handlePatch(req, res, ticket, actor) {
 
   if (status !== undefined) {
     ticket.status = status
+    if (status === 'Resolved' && !ticket.resolvedAt) {
+      ticket.resolvedAt = now
+    }
     addActivity(ticket, {
       type: 'status',
       message: `Status changed to ${status}`,

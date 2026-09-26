@@ -8,7 +8,10 @@ const ROLE_LINKS = {
     { href: '/tickets/new', label: 'New Ticket' },
   ],
   technician: [{ href: '/technician/dashboard', label: 'My Queue' }],
-  admin: [{ href: '/admin/assign', label: 'Assignment' }],
+  admin: [
+    { href: '/admin/dashboard', label: 'Analytics' },
+    { href: '/admin/assign', label: 'Assignment' },
+  ],
 }
 
 export default function Navbar({ user, title }) {

@@ -7,6 +7,22 @@ import {
 } from '../../../lib/store'
 
 const MIN_DESCRIPTION_LENGTH = 20
+const MAX_ATTACHMENTS = 3
+const MAX_ATTACHMENT_BYTES = 250 * 1024
+const ALLOWED_ATTACHMENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '2mb',
+    },
+  },
+}
 
 export function getRequestUser(req) {
   const rawId = req.headers['x-user-id']
@@ -73,7 +89,15 @@ function handlePost(req, res) {
     return res.status(403).json({ error: 'Only students can create tickets.' })
   }
 
-  const { title, description, category, location, priority, studentId } =
+  const {
+    title,
+    description,
+    category,
+    location,
+    priority,
+    studentId,
+    attachments = [],
+  } =
     req.body || {}
 
   if (studentId && studentId !== actor.id) {
@@ -111,6 +135,61 @@ function handlePost(req, res) {
   if (!PRIORITIES.includes(priority)) {
     return res.status(400).json({ error: 'Unknown priority.' })
   }
+
+  if (!Array.isArray(attachments) || attachments.length > MAX_ATTACHMENTS) {
+    return res.status(400).json({
+      error: `Attach no more than ${MAX_ATTACHMENTS} files.`,
+    })
+  }
+
+  const cleanAttachments = []
+  for (const attachment of attachments) {
+    if (!attachment || typeof attachment !== 'object') {
+      return res.status(400).json({ error: 'Invalid attachment.' })
+    }
+    const { name, type, size, dataUrl } = attachment
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      !ALLOWED_ATTACHMENT_TYPES.includes(type) ||
+      !Number.isInteger(size) ||
+      size < 1 ||
+      size > MAX_ATTACHMENT_BYTES ||
+      typeof dataUrl !== 'string' ||
+      !dataUrl.startsWith(`data:${type};base64,`)
+    ) {
+      return res.status(400).json({
+        error: 'Attachments must be JPEG, PNG, WebP, or PDF files under 250 KB.',
+      })
+    }
+    cleanAttachments.push({
+      name: name.trim().slice(0, 120),
+      type,
+      size,
+      dataUrl,
+    })
+  }
+
+  const normalize = (value) =>
+    String(value || '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim()
+  const duplicate = tickets.find(
+    (ticket) =>
+      !['Resolved', 'Closed'].includes(ticket.status) &&
+      normalize(ticket.title) === normalize(cleanTitle) &&
+      normalize(ticket.location) === normalize(cleanLocation) &&
+      ticket.category === category,
+  )
+  if (duplicate) {
+    return res.status(409).json({
+      error:
+        'A similar active ticket already exists for this location and category.',
+      duplicate: true,
+    })
+  }
+
   const now = new Date().toISOString()
 
   const ticket = {
@@ -123,6 +202,7 @@ function handlePost(req, res) {
     status: 'Open',
     studentId: actor.id,
     technicianId: null,
+    attachments: cleanAttachments,
     createdAt: now,
     updatedAt: now,
     activity: [
