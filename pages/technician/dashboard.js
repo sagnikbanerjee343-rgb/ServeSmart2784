@@ -5,6 +5,7 @@ import Navbar from '../../components/Navbar'
 import Tag from '../../components/Tag'
 import StatStrip from '../../components/StatStrip'
 import { getCurrentUser } from '../../lib/auth'
+import { PRIORITIES, STATUSES } from '../../lib/store'
 import {
   STATUS_META,
   PRIORITY_META,
@@ -28,6 +29,7 @@ export default function TechnicianDashboard() {
   const [working, setWorking] = useState(null)
 
   const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('all')
   const [priority, setPriority] = useState('all')
 
   useEffect(() => {
@@ -96,7 +98,8 @@ export default function TechnicianDashboard() {
   }, [tickets])
 
   const visible = useMemo(() => {
-    let list = tickets.filter((t) => !['Resolved', 'Closed'].includes(t.status))
+    let list = tickets
+    if (status !== 'all') list = list.filter((t) => t.status === status)
     if (priority !== 'all') list = list.filter((t) => t.priority === priority)
     const q = search.trim().toLowerCase()
     if (q) {
@@ -107,9 +110,11 @@ export default function TechnicianDashboard() {
       )
     }
     return [...list].sort(
-      (a, b) => priorityOrder(a.priority) - priorityOrder(b.priority),
+      (a, b) =>
+        priorityOrder(a.priority) - priorityOrder(b.priority) ||
+        new Date(b.updatedAt) - new Date(a.updatedAt),
     )
-  }, [tickets, priority, search])
+  }, [tickets, status, priority, search])
 
   if (!user) return null
 
@@ -118,7 +123,9 @@ export default function TechnicianDashboard() {
       <Navbar user={user} title="My Queue" />
       <div className="container">
         <h1>My Queue</h1>
-        <p className="subtitle">Open tickets assigned to you, by priority.</p>
+        <p className="subtitle">
+          Tickets assigned to you, ordered from highest to lowest priority.
+        </p>
 
         <StatStrip stats={stats} />
 
@@ -131,15 +138,24 @@ export default function TechnicianDashboard() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="all">All statuses</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
           >
             <option value="all">All priorities</option>
-            <option value="P1">P1</option>
-            <option value="P2">P2</option>
-            <option value="P3">P3</option>
-            <option value="P4">P4</option>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -158,8 +174,10 @@ export default function TechnicianDashboard() {
 
           {!loading && visible.length === 0 && (
             <div className="empty-state">
-              <strong>Queue clear</strong>
-              Nothing open assigned to you right now.
+              <strong>No matching tickets</strong>
+              {tickets.length === 0
+                ? 'Nothing is assigned to you right now.'
+                : 'Try a different status, priority, or search term.'}
             </div>
           )}
 
