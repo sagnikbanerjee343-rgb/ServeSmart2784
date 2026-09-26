@@ -8,6 +8,14 @@ const NEXT_STATUS = {
   Resolved: 'Closed',
 }
 
+function addActivity(ticket, activity) {
+  if (!Array.isArray(ticket.activity)) ticket.activity = []
+  ticket.activity.push({
+    id: `a${ticket.activity.length + 1}`,
+    ...activity,
+  })
+}
+
 export default function handler(req, res) {
   const { id } = req.query
   const ticket = tickets.find((t) => t.id === id)
@@ -22,24 +30,47 @@ export default function handler(req, res) {
 }
 
 function handlePatch(req, res, ticket) {
-  const { technicianId, status } = req.body || {}
+  const { actorId, technicianId, status } = req.body || {}
   const now = new Date().toISOString()
 
+  if (status !== undefined && typeof status !== 'string') {
+    return res.status(400).json({ error: 'Status must be a string.' })
+  }
+
+  const actor = actorId ? findUser(actorId) : null
+  if ((status !== undefined || technicianId !== undefined) && !actor) {
+    return res.status(401).json({ error: 'A valid logged-in user is required.' })
+  }
+
   // Validate everything first so a bad request never half-applies.
-  const tech = technicianId ? findUser(technicianId) : null
-  if (technicianId && (!tech || tech.role !== 'technician')) {
+  const hasAssignmentChange = technicianId !== undefined
+  const tech = hasAssignmentChange ? findUser(technicianId) : null
+  if (hasAssignmentChange && (!tech || tech.role !== 'technician')) {
     return res.status(400).json({ error: 'Choose a valid technician.' })
   }
-  const assigning = Boolean(tech) && tech.id !== ticket.technicianId
-  // Assigning an Open ticket moves it to Assigned automatically.
-  const current =
-    assigning && ticket.status === 'Open' ? 'Assigned' : ticket.status
 
-  if (status && status !== current) {
+  const assigning = hasAssignmentChange && tech.id !== ticket.technicianId
+  if (assigning && actor.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can assign tickets.' })
+  }
+
+  const current = ticket.status
+
+  if (status !== undefined) {
     if (!STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Unknown status.' })
     }
-    if (!tech && !ticket.technicianId) {
+    if (status === current) {
+      return res.status(400).json({
+        error: `The ticket is already ${current}.`,
+      })
+    }
+    if (actor.role !== 'technician' || actor.id !== ticket.technicianId) {
+      return res.status(403).json({
+        error: 'Only the assigned technician can change the status.',
+      })
+    }
+    if (!ticket.technicianId) {
       return res
         .status(400)
         .json({ error: 'Assign a technician before changing status.' })
@@ -56,20 +87,25 @@ function handlePatch(req, res, ticket) {
   if (assigning) {
     const wasAssigned = Boolean(ticket.technicianId)
     ticket.technicianId = tech.id
-    if (ticket.status === 'Open') ticket.status = 'Assigned'
-    ticket.activity.push({
-      id: `a${ticket.activity.length + 1}`,
+    addActivity(ticket, {
       type: 'assigned',
       message: `${wasAssigned ? 'Reassigned' : 'Assigned'} to ${tech.name}`,
       at: now,
     })
+    if (ticket.status === 'Open') {
+      ticket.status = 'Assigned'
+      addActivity(ticket, {
+        type: 'status',
+        message: 'Status changed to Assigned',
+        at: now,
+      })
+    }
     changed = true
   }
 
-  if (status && status !== ticket.status) {
+  if (status !== undefined) {
     ticket.status = status
-    ticket.activity.push({
-      id: `a${ticket.activity.length + 1}`,
+    addActivity(ticket, {
       type: 'status',
       message: `Status changed to ${status}`,
       at: now,

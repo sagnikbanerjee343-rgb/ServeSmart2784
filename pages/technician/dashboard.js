@@ -61,15 +61,18 @@ export default function TechnicianDashboard() {
       const res = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ status: nextStatus, actorId: user.id }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Could not update that ticket.')
+      }
       const data = await res.json()
       setTickets((list) =>
         list.map((t) => (t.id === ticketId ? data.ticket : t)),
       )
-    } catch {
-      setError('Could not update that ticket. Try again.')
+    } catch (err) {
+      setError(err.message)
     } finally {
       setWorking(null)
     }

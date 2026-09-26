@@ -67,9 +67,12 @@ export default function AdminAssign() {
       const res = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ technicianId }),
+        body: JSON.stringify({ technicianId, actorId: user.id }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Could not assign that ticket.')
+      }
       const data = await res.json()
       // Update in place instead of refetching everything
       setAllTickets((list) =>
@@ -80,8 +83,8 @@ export default function AdminAssign() {
         delete next[ticketId]
         return next
       })
-    } catch {
-      setError('Could not assign that ticket. Try again.')
+    } catch (err) {
+      setError(err.message)
     } finally {
       setWorking(null)
     }

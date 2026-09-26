@@ -60,9 +60,12 @@ export default function TicketDetail() {
       const res = await fetch(`/api/tickets/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, actorId: user.id }),
       })
-      if (!res.ok) throw new Error('That update failed. Try again.')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'That update failed. Try again.')
+      }
       const data = await res.json()
       setTicket(data.ticket)
     } catch (err) {
@@ -142,7 +145,7 @@ export default function TicketDetail() {
             <div className="panel panel-pad">
               <div className="section-label">Activity</div>
               <div className="timeline">
-                {ticket.activity.map((a) => (
+                {(ticket.activity || []).map((a) => (
                   <div className="timeline-item" key={a.id}>
                     <div className="timeline-dot" />
                     <div className="timeline-body">
