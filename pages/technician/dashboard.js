@@ -46,7 +46,9 @@ export default function TechnicianDashboard() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/tickets?technicianId=${u.id}`)
+      const res = await fetch(`/api/tickets?technicianId=${u.id}`, {
+        headers: { 'x-user-id': u.id },
+      })
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
       setTickets(data.tickets)
@@ -62,8 +64,11 @@ export default function TechnicianDashboard() {
     try {
       const res = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus, actorId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id,
+        },
+        body: JSON.stringify({ status: nextStatus }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))

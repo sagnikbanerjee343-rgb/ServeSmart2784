@@ -61,8 +61,11 @@ export default function NewTicket() {
     try {
       const res = await fetch('/api/tickets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, studentId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id,
+        },
+        body: JSON.stringify(form),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))

@@ -43,7 +43,9 @@ export default function TicketDetail() {
   async function load() {
     setError(null)
     try {
-      const res = await fetch(`/api/tickets/${id}`)
+      const res = await fetch(`/api/tickets/${id}`, {
+        headers: { 'x-user-id': user.id },
+      })
       if (!res.ok) throw new Error('Ticket not found.')
       const data = await res.json()
       setTicket(data.ticket)
@@ -59,8 +61,11 @@ export default function TicketDetail() {
     try {
       const res = await fetch(`/api/tickets/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, actorId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id,
+        },
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))

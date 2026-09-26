@@ -40,7 +40,9 @@ export default function TicketList() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/tickets?studentId=${u.id}`)
+      const res = await fetch(`/api/tickets?studentId=${u.id}`, {
+        headers: { 'x-user-id': u.id },
+      })
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
       setTickets(data.tickets)

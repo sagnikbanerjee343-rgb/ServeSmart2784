@@ -1,4 +1,5 @@
 import { tickets, findUser, STATUSES } from '../../../lib/store'
+import { canViewTicket, getRequestUser } from './index'
 
 // A ticket moves forward one step at a time.
 const NEXT_STATUS = {
@@ -21,25 +22,28 @@ export default function handler(req, res) {
   const ticket = tickets.find((t) => t.id === id)
   if (!ticket) return res.status(404).json({ error: 'Ticket not found.' })
 
+  const actor = getRequestUser(req)
+  if (!actor) {
+    return res.status(401).json({ error: 'A valid logged-in user is required.' })
+  }
+  if (!canViewTicket(actor, ticket)) {
+    return res.status(403).json({ error: 'You cannot access this ticket.' })
+  }
+
   if (req.method === 'GET') return res.status(200).json({ ticket })
 
-  if (req.method === 'PATCH') return handlePatch(req, res, ticket)
+  if (req.method === 'PATCH') return handlePatch(req, res, ticket, actor)
 
   res.setHeader('Allow', ['GET', 'PATCH'])
   return res.status(405).json({ error: 'Method not allowed' })
 }
 
-function handlePatch(req, res, ticket) {
-  const { actorId, technicianId, status } = req.body || {}
+function handlePatch(req, res, ticket, actor) {
+  const { technicianId, status } = req.body || {}
   const now = new Date().toISOString()
 
   if (status !== undefined && typeof status !== 'string') {
     return res.status(400).json({ error: 'Status must be a string.' })
-  }
-
-  const actor = actorId ? findUser(actorId) : null
-  if ((status !== undefined || technicianId !== undefined) && !actor) {
-    return res.status(401).json({ error: 'A valid logged-in user is required.' })
   }
 
   // Validate everything first so a bad request never half-applies.

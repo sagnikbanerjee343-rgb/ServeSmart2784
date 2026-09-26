@@ -8,6 +8,20 @@ import {
 
 const MIN_DESCRIPTION_LENGTH = 20
 
+export function getRequestUser(req) {
+  const rawId = req.headers['x-user-id']
+  const userId = Array.isArray(rawId) ? rawId[0] : rawId
+  return userId ? findUser(userId) : null
+}
+
+export function canViewTicket(user, ticket) {
+  if (!user) return false
+  if (user.role === 'admin') return true
+  if (user.role === 'student') return ticket.studentId === user.id
+  if (user.role === 'technician') return ticket.technicianId === user.id
+  return false
+}
+
 export default function handler(req, res) {
   if (req.method === 'GET') return handleGet(req, res)
   if (req.method === 'POST') return handlePost(req, res)
@@ -16,20 +30,55 @@ export default function handler(req, res) {
 }
 
 function handleGet(req, res) {
+  const actor = getRequestUser(req)
+  if (!actor) {
+    return res.status(401).json({ error: 'A valid logged-in user is required.' })
+  }
+
   const { studentId, technicianId, unassigned } = req.query
   let result = tickets
 
-  if (studentId) result = result.filter((t) => t.studentId === studentId)
-  if (technicianId)
-    result = result.filter((t) => t.technicianId === technicianId)
-  if (unassigned === 'true') result = result.filter((t) => !t.technicianId)
+  if (actor.role === 'student') {
+    if (studentId && studentId !== actor.id) {
+      return res.status(403).json({ error: 'You can only view your own tickets.' })
+    }
+    if (technicianId || unassigned === 'true') {
+      return res.status(403).json({ error: 'You cannot view these tickets.' })
+    }
+    result = result.filter((t) => t.studentId === actor.id)
+  } else if (actor.role === 'technician') {
+    if (studentId || (technicianId && technicianId !== actor.id)) {
+      return res.status(403).json({ error: 'You can only view your assigned tickets.' })
+    }
+    if (unassigned === 'true') {
+      return res.status(403).json({ error: 'You cannot view unassigned tickets.' })
+    }
+    result = result.filter((t) => t.technicianId === actor.id)
+  } else if (actor.role === 'admin') {
+    if (studentId) result = result.filter((t) => t.studentId === studentId)
+    if (technicianId)
+      result = result.filter((t) => t.technicianId === technicianId)
+    if (unassigned === 'true') result = result.filter((t) => !t.technicianId)
+  }
 
   return res.status(200).json({ tickets: result })
 }
 
 function handlePost(req, res) {
+  const actor = getRequestUser(req)
+  if (!actor) {
+    return res.status(401).json({ error: 'A valid logged-in user is required.' })
+  }
+  if (actor.role !== 'student') {
+    return res.status(403).json({ error: 'Only students can create tickets.' })
+  }
+
   const { title, description, category, location, priority, studentId } =
     req.body || {}
+
+  if (studentId && studentId !== actor.id) {
+    return res.status(403).json({ error: 'You can only create tickets for yourself.' })
+  }
 
   const cleanTitle = typeof title === 'string' ? title.trim() : ''
   const cleanDescription =
@@ -56,14 +105,6 @@ function handlePost(req, res) {
   if (!priority) {
     return res.status(400).json({ error: 'Priority is required.' })
   }
-  if (!studentId) {
-    return res.status(400).json({ error: 'Student is required.' })
-  }
-
-  const student = findUser(studentId)
-  if (!student || student.role !== 'student') {
-    return res.status(400).json({ error: 'A valid student is required.' })
-  }
   if (!CATEGORIES.includes(category)) {
     return res.status(400).json({ error: 'Unknown category.' })
   }
@@ -80,7 +121,7 @@ function handlePost(req, res) {
     location: cleanLocation,
     priority,
     status: 'Open',
-    studentId: studentId || null,
+    studentId: actor.id,
     technicianId: null,
     createdAt: now,
     updatedAt: now,
@@ -88,7 +129,7 @@ function handlePost(req, res) {
       {
         id: 'a1',
         type: 'created',
-        message: `Submitted by ${student ? student.name : 'student'}`,
+        message: `Submitted by ${actor.name}`,
         at: now,
       },
     ],
