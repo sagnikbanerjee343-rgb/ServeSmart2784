@@ -32,7 +32,12 @@ export default function handler(req, res) {
 
   if (req.method === 'GET') return res.status(200).json({ ticket })
 
-  if (req.method === 'PATCH') return handlePatch(req, res, ticket, actor)
+  if (req.method === 'PATCH') {
+    if (actor.role !== 'technician' && actor.role !== 'admin') {
+      return res.status(403).json({ error: 'You cannot update this ticket.' })
+    }
+    return handlePatch(req, res, ticket, actor)
+  }
 
   res.setHeader('Allow', ['GET', 'PATCH'])
   return res.status(405).json({ error: 'Method not allowed' })
@@ -41,6 +46,10 @@ export default function handler(req, res) {
 function handlePatch(req, res, ticket, actor) {
   const { technicianId, status } = req.body || {}
   const now = new Date().toISOString()
+
+  if (technicianId === undefined && status === undefined) {
+    return res.status(400).json({ error: 'No ticket update was provided.' })
+  }
 
   if (status !== undefined && typeof status !== 'string') {
     return res.status(400).json({ error: 'Status must be a string.' })
@@ -87,7 +96,11 @@ function handlePatch(req, res, ticket, actor) {
     if (NEXT_STATUS[current] !== status) {
       return res
         .status(400)
-        .json({ error: `A ticket cannot move from ${current} to ${status}.` })
+        .json({
+          error: `A ticket can only move from ${current} to ${
+            NEXT_STATUS[current] || 'a later status'
+          }.`,
+        })
     }
   }
 
