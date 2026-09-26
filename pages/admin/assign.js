@@ -35,8 +35,10 @@ export default function AdminAssign() {
 
   useEffect(() => {
     const u = getCurrentUser()
-    if (!u) {
-      router.push('/')
+    if (!u || u.role !== 'admin') {
+      if (u?.role === 'student') router.push('/tickets')
+      else if (u?.role === 'technician') router.push('/technician/dashboard')
+      else router.push('/')
       return
     }
     setUser(u)
@@ -260,6 +262,11 @@ export default function AdminAssign() {
                   <Tag tone={STATUS_META[t.status].tone}>{t.status}</Tag>
                 </div>
                 <div>
+                  <div className="field-hint">
+                    Current:{' '}
+                    {technicians.find((tech) => tech.id === t.technicianId)
+                      ?.name || 'Unknown'}
+                  </div>
                   <select
                     value={selections[t.id] || ''}
                     onChange={(e) =>

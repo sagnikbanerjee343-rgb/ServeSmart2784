@@ -50,8 +50,13 @@ function handlePatch(req, res, ticket) {
   }
 
   const assigning = hasAssignmentChange && tech.id !== ticket.technicianId
-  if (assigning && actor.role !== 'admin') {
+  if (hasAssignmentChange && actor.role !== 'admin') {
     return res.status(403).json({ error: 'Only admins can assign tickets.' })
+  }
+  if (hasAssignmentChange && !assigning) {
+    return res.status(400).json({
+      error: 'That technician is already assigned to this ticket.',
+    })
   }
 
   const current = ticket.status
